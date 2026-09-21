@@ -128,6 +128,21 @@ supabase/
       - README: 로컬 실행법/환경 변수는 1단계에서 이미 작성됨. 아래 배포 방법 섹션을 실제
         절차로 구체화함
 
+- [x] 멤버 관리 (관리자 웹 UI) — 8단계 완료 시 조회 화면으로만 남겨두었던 부분을 보완.
+      `/admin/members`에서 관리자가 직접 계정 생성(이메일/이름/역할/색상/초기 비밀번호,
+      자동 생성 버튼), 정보 수정, 비밀번호 재설정, 비활성화/재활성화를 할 수 있음.
+      `service_role` 키는 서버 액션(`src/lib/members/actions.ts`)에서만 사용하며 매 호출마다
+      요청자가 활성 관리자인지 확인함. 비활성화는 `profiles.is_active=false` + Supabase Auth
+      정지(ban)를 함께 적용해 로그인/세션 갱신을 막고, 근무 기록은 보존됨. 관리자가 자기
+      자신을 강등/비활성화하는 것은 막음. 검증 로직은 Vitest 단위 테스트 포함
+
+## 신규 계정 만들기
+
+관리자로 로그인 → 상단 "멤버 관리" → "멤버 추가". 초기 비밀번호를 정해(또는 자동 생성)
+멤버에게 전달하면 됩니다. Supabase Studio/SQL을 직접 만질 필요가 없습니다. 시드 계정은
+로컬 개발용이므로 프로덕션에서는 첫 관리자만 Supabase 대시보드에서 만든 뒤 그 계정으로
+나머지를 등록하세요.
+
 ## 배포 방법 (Vercel + Supabase 프로덕션 프로젝트)
 
 로컬 개발은 Supabase CLI로 띄운 Docker 스택을 사용하지만, 배포 시에는 실제(호스티드)
@@ -143,8 +158,9 @@ supabase db push                             # supabase/migrations/*.sql 을 순
 ```
 
 - 시드 데이터(`supabase/seed.sql`)는 로컬 개발/테스트 전용 더미 계정입니다. 프로덕션에는
-  실행하지 말고, 실제 관리자 계정은 Supabase 대시보드의 Authentication에서 직접 생성한 뒤
-  `profiles` 테이블에 `role='admin'` 행을 추가하세요.
+  실행하지 말고, 첫 관리자 계정만 Supabase 대시보드의 Authentication → Add user에서
+  만드세요(User Metadata에 `{"name":"이름","role":"admin"}` 입력. `profiles` 행은 트리거가
+  자동 생성). 이후 멤버는 앱의 "멤버 관리"에서 등록합니다.
 - 마이그레이션에는 `btree_gist` 확장, RLS 정책, 알림 생성 트리거, `supabase_realtime`
   publication 등록이 모두 포함되어 있으므로 `db push` 한 번으로 스키마가 완전히 갖춰집니다.
 

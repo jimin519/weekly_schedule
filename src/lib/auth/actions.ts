@@ -23,6 +23,9 @@ export async function login(
   });
 
   if (error) {
+    if (error.code === "user_banned") {
+      return { error: "비활성화된 계정입니다. 관리자에게 문의하세요." };
+    }
     return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
   }
 
@@ -32,9 +35,14 @@ export async function login(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, is_active")
     .eq("id", user!.id)
     .single();
+
+  if (profile && !profile.is_active) {
+    await supabase.auth.signOut();
+    return { error: "비활성화된 계정입니다. 관리자에게 문의하세요." };
+  }
 
   redirect(profile?.role === "admin" ? "/admin/schedule" : "/me/schedule");
 }
