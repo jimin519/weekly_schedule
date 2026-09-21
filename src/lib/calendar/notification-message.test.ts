@@ -79,4 +79,53 @@ describe("formatNotificationMessage", () => {
     });
     expect(message).toBe("문의에 새 답장이 도착했습니다: 휴가 문의");
   });
+
+  describe("attendance_recorded", () => {
+    // 2026-09-22(화) 09:00–18:00 KST
+    const base = { start_at: "2026-09-22T00:00:00.000Z", end_at: "2026-09-22T09:00:00.000Z" };
+
+    it("연장 근무를 알린다", () => {
+      expect(
+        formatNotificationMessage("attendance_recorded", {
+          ...base,
+          status: "worked",
+          actual_start_at: base.start_at,
+          actual_end_at: "2026-09-22T10:00:00.000Z",
+        }),
+      ).toBe("9월 22일 (화) 근무가 실제 09:00–19:00로 기록되었습니다. (연장 +1시간)");
+    });
+
+    it("조퇴를 알린다", () => {
+      expect(
+        formatNotificationMessage("attendance_recorded", {
+          ...base,
+          status: "worked",
+          actual_start_at: base.start_at,
+          actual_end_at: "2026-09-22T07:30:00.000Z",
+        }),
+      ).toBe("9월 22일 (화) 근무가 실제 09:00–16:30로 기록되었습니다. (조퇴 −1시간 30분)");
+    });
+
+    it("결근을 알린다", () => {
+      expect(
+        formatNotificationMessage("attendance_recorded", {
+          ...base,
+          status: "absent",
+          actual_start_at: null,
+          actual_end_at: null,
+        }),
+      ).toBe("9월 22일 (화) 근무가 결근으로 기록되었습니다.");
+    });
+
+    it("계획대로 정정된 경우를 알린다", () => {
+      expect(
+        formatNotificationMessage("attendance_recorded", {
+          ...base,
+          status: "worked",
+          actual_start_at: base.start_at,
+          actual_end_at: base.end_at,
+        }),
+      ).toBe("9월 22일 (화) 근무 기록이 계획대로 정정되었습니다.");
+    });
+  });
 });

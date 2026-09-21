@@ -1,7 +1,3 @@
-// 자동 생성됨. 스키마 변경 후 재생성하세요:
-//   npx supabase gen types typescript --local > src/lib/types/database.ts
-// 리터럴 유니온 타입(역할/상태 등)은 이 파일이 아니라 ./domain.ts 에 있습니다.
-
 export type Json =
   | string
   | number
@@ -223,6 +219,54 @@ export type Database = {
           week_start_date?: string
         }
         Relationships: []
+      }
+      shift_records: {
+        Row: {
+          actual_end_at: string | null
+          actual_start_at: string | null
+          note: string | null
+          recorded_at: string
+          recorded_by: string | null
+          shift_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          actual_end_at?: string | null
+          actual_start_at?: string | null
+          note?: string | null
+          recorded_at?: string
+          recorded_by?: string | null
+          shift_id: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          actual_end_at?: string | null
+          actual_start_at?: string | null
+          note?: string | null
+          recorded_at?: string
+          recorded_by?: string | null
+          shift_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shift_records_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shift_records_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: true
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shifts: {
         Row: {

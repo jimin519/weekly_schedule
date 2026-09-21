@@ -13,7 +13,9 @@ export type NotificationType =
   | "week_unpublished"
   | "inquiry_reply"
   | "new_inquiry"
-  | "unavailability_conflict";
+  | "unavailability_conflict"
+  | "attendance_recorded";
+export type AttendanceStatus = "worked" | "absent";
 export type InquiryStatus = "open" | "resolved";
 export type RecurrenceRule = {
   freq: "weekly";
@@ -25,6 +27,9 @@ export type ScheduleWeek = Omit<Tables<"schedule_weeks">, "status"> & {
   status: WeekStatus;
 };
 export type Shift = Tables<"shifts">;
+export type ShiftRecord = Omit<Tables<"shift_records">, "status"> & {
+  status: AttendanceStatus;
+};
 export type Unavailability = Omit<Tables<"unavailability">, "recurrence_rule"> & {
   recurrence_rule: RecurrenceRule | null;
 };

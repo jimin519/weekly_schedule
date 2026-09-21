@@ -49,6 +49,19 @@ import {
   useUpdateShift,
 } from "@/lib/queries/shifts";
 import { useAllUnavailability, unavailabilityQueryKey } from "@/lib/queries/unavailability";
+import {
+  ATTENDANCE_RANGE_ROOT_KEY,
+  useDeleteShiftRecord,
+  useSaveShiftRecord,
+  useWeekShiftRecords,
+  weekRecordsQueryKey,
+} from "@/lib/queries/shift-records";
+import { AttendanceEditor, type AttendanceSaveInput } from "@/components/attendance/attendance-editor";
+import {
+  attendanceBadgeLabel,
+  hasShiftStarted,
+  summarizeAttendance,
+} from "@/lib/calendar/attendance";
 import { addWeeks, WEEKDAY_LABELS_KO } from "@/lib/calendar/week";
 import {
   dayMinutesToISO,
@@ -98,6 +111,12 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
   const shiftsQuery = useShifts(week?.id);
   const shifts = useMemo(() => shiftsQuery.data ?? [], [shiftsQuery.data]);
 
+  const recordsQuery = useWeekShiftRecords(week?.id);
+  const recordsByShiftId = useMemo(
+    () => new Map((recordsQuery.data ?? []).map((r) => [r.shift_id, r])),
+    [recordsQuery.data],
+  );
+
   const unavailabilityQuery = useAllUnavailability();
   const unavailabilityBlocks = useMemo(
     () => expandUnavailabilityForWeek(unavailabilityQuery.data ?? [], weekDates),
@@ -107,6 +126,8 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
   const createShift = useCreateShift(week?.id);
   const updateShift = useUpdateShift(week?.id);
   const deleteShift = useDeleteShift(week?.id);
+  const saveRecord = useSaveShiftRecord(week?.id);
+  const deleteRecord = useDeleteShiftRecord(week?.id);
   const copyPreviousWeek = useCopyPreviousWeek(week?.id);
   const setWeekStatus = useSetWeekStatus(weekStart);
 
@@ -131,6 +152,16 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
     { invalidateKey: weekQueryKey(weekStart) },
   );
 
+  const recordsRealtimeStatus = useTableRealtime(
+    "shift_records",
+    undefined,
+    () => {
+      queryClient.invalidateQueries({ queryKey: weekRecordsQueryKey(week?.id) });
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_RANGE_ROOT_KEY });
+    },
+    { invalidateKey: weekRecordsQueryKey(week?.id) },
+  );
+
   const unavailabilityRealtimeStatus = useTableRealtime(
     "unavailability",
     undefined,
@@ -142,6 +173,7 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
     shiftsRealtimeStatus,
     weekRealtimeStatus,
     unavailabilityRealtimeStatus,
+    recordsRealtimeStatus,
   ].includes("disconnected");
 
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
@@ -175,11 +207,12 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
       const { dayIndex, minutes: startMinutes } = isoToDayMinutes(s.start_at, weekStart);
       if (dayIndex === -1) return [];
       const endMinutes = normalizeEndMinutes(dayIndex, s.end_at, weekStart);
+      const badge = attendanceBadgeLabel(summarizeAttendance(s, recordsByShiftId.get(s.id)));
       return [
-        { id: s.id, memberId: s.member_id, dayIndex, startMinutes, endMinutes, note: s.note },
+        { id: s.id, memberId: s.member_id, dayIndex, startMinutes, endMinutes, note: s.note, badge },
       ];
     });
-  }, [shifts, weekStart]);
+  }, [shifts, weekStart, recordsByShiftId]);
 
   const shiftsById = useMemo(() => new Map(shifts.map((s) => [s.id, s])), [shifts]);
   const blocksById = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks]);
@@ -196,13 +229,19 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
     );
   }, [draftCreation, members, blocks, unavailabilityBlocks]);
 
-  const hoursByMemberId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const b of blocks) {
-      map.set(b.memberId, (map.get(b.memberId) ?? 0) + (b.endMinutes - b.startMinutes));
+  // 좌측 멤버별 시간: 기록이 있으면 실제 근무 시간, 없으면 계획 시간으로 합산한다.
+  const { hoursByMemberId, adjustmentByMemberId } = useMemo(() => {
+    const hours = new Map<string, number>();
+    const adjustments = new Map<string, number>();
+    for (const s of shifts) {
+      const summary = summarizeAttendance(s, recordsByShiftId.get(s.id));
+      hours.set(s.member_id, (hours.get(s.member_id) ?? 0) + summary.effectiveMinutes);
+      if (summary.diffMinutes !== 0) {
+        adjustments.set(s.member_id, (adjustments.get(s.member_id) ?? 0) + summary.diffMinutes);
+      }
     }
-    return map;
-  }, [blocks]);
+    return { hoursByMemberId: hours, adjustmentByMemberId: adjustments };
+  }, [shifts, recordsByShiftId]);
 
   const publishSummary = useMemo(() => {
     const assignedMemberIds = new Set(blocks.map((b) => b.memberId));
@@ -407,6 +446,25 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
     setSelectedShiftId(null);
   }
 
+  function handleSaveRecord(input: AttendanceSaveInput) {
+    if (!selectedShiftId) return;
+    saveRecord.mutate(
+      { shiftId: selectedShiftId, recordedBy: adminId, ...input },
+      {
+        onSuccess: () => toast.success("실제 근무 기록을 저장했습니다."),
+        onError: () => toast.error("기록을 저장하지 못했습니다."),
+      },
+    );
+  }
+
+  function handleClearRecord() {
+    if (!selectedShiftId) return;
+    deleteRecord.mutate(selectedShiftId, {
+      onSuccess: () => toast.success("기록을 초기화했습니다."),
+      onError: () => toast.error("기록을 초기화하지 못했습니다."),
+    });
+  }
+
   function handleCopyLastWeek() {
     if (!week) return;
     copyPreviousWeek.mutate(
@@ -554,6 +612,7 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
               setVisibleMemberIds(visible ? new Set(members.map((m) => m.id)) : new Set())
             }
             hoursByMemberId={hoursByMemberId}
+            adjustmentByMemberId={adjustmentByMemberId}
           />
         )}
 
@@ -748,6 +807,14 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
                 placeholder="선택 사항"
               />
             </div>
+            <AttendanceEditor
+              shift={selectedShift}
+              record={recordsByShiftId.get(selectedShift.id) ?? null}
+              hasStarted={hasShiftStarted(selectedShift)}
+              isSaving={saveRecord.isPending || deleteRecord.isPending}
+              onSave={handleSaveRecord}
+              onClear={handleClearRecord}
+            />
             <Button variant="destructive" size="sm" onClick={handleDeleteShift}>
               근무 삭제
             </Button>

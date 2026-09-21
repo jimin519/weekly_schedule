@@ -13,6 +13,7 @@ export function DailyDetailPanel({
   onClose,
   currentMemberId,
   onInquireAboutShift,
+  recordLabelByBlockId,
 }: {
   date: string | null;
   weekDates: string[];
@@ -21,6 +22,8 @@ export function DailyDetailPanel({
   onClose: () => void;
   currentMemberId?: string;
   onInquireAboutShift?: (block: CalendarBlock) => void;
+  /** 근무 블록 id → 실제 근무 기록 설명(본인 근무에만 존재) */
+  recordLabelByBlockId?: Map<string, string>;
 }) {
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const dayIndex = date ? weekDates.indexOf(date) : -1;
@@ -57,7 +60,7 @@ export function DailyDetailPanel({
             {dayBlocks.map((b) => {
               const member = membersById.get(b.memberId);
               return (
-                <li key={b.id} className="flex items-center gap-2 text-sm">
+                <li key={b.id} className="flex flex-wrap items-center gap-2 text-sm">
                   <span
                     className="size-2.5 shrink-0 rounded-full"
                     style={{ backgroundColor: member?.color ?? "#94A3B8" }}
@@ -75,6 +78,11 @@ export function DailyDetailPanel({
                     >
                       문의하기
                     </Button>
+                  )}
+                  {recordLabelByBlockId?.get(b.id) && (
+                    <div className="basis-full pl-[18px] text-xs text-muted-foreground">
+                      {recordLabelByBlockId.get(b.id)}
+                    </div>
                   )}
                 </li>
               );

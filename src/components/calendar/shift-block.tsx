@@ -78,8 +78,13 @@ export function ShiftBlock({
       {...(!readOnly && listeners)}
       {...(!readOnly && attributes)}
     >
-      <div className="truncate font-medium text-foreground">
-        {member?.name ?? "미배정"}
+      <div className="flex items-center gap-1">
+        <span className="truncate font-medium text-foreground">{member?.name ?? "미배정"}</span>
+        {block.badge && (
+          <span className="shrink-0 rounded bg-foreground/80 px-1 text-[10px] font-semibold text-background">
+            {block.badge}
+          </span>
+        )}
       </div>
       {height > 30 && (
         <div className="truncate text-muted-foreground">

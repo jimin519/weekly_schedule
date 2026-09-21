@@ -1,5 +1,6 @@
 import { formatSeoul } from "@/lib/date";
 import type { NotificationType } from "@/lib/types/domain";
+import { formatSignedMinutes, minutesBetween } from "./attendance";
 
 type NotificationPayload = Record<string, unknown>;
 
@@ -16,6 +17,23 @@ function formatShiftDateLabel(payload: NotificationPayload): string {
 
 function formatTimeRange(startIso: string, endIso: string): string {
   return `${formatSeoul(new Date(startIso), "HH:mm")}–${formatSeoul(new Date(endIso), "HH:mm")}`;
+}
+
+function formatAttendanceMessage(payload: NotificationPayload): string {
+  const date = formatShiftDateLabel(payload);
+  if (payload.status === "absent") return `${date} 근무가 결근으로 기록되었습니다.`;
+
+  const actualStart = String(payload.actual_start_at);
+  const actualEnd = String(payload.actual_end_at);
+  const diff =
+    minutesBetween(actualStart, actualEnd) -
+    minutesBetween(String(payload.start_at), String(payload.end_at));
+  const actualRange = formatTimeRange(actualStart, actualEnd);
+
+  if (diff > 0) return `${date} 근무가 실제 ${actualRange}로 기록되었습니다. (연장 ${formatSignedMinutes(diff)})`;
+  if (diff < 0) return `${date} 근무가 실제 ${actualRange}로 기록되었습니다. (조퇴 ${formatSignedMinutes(diff)})`;
+  if (actualStart === String(payload.start_at)) return `${date} 근무 기록이 계획대로 정정되었습니다.`;
+  return `${date} 근무가 실제 ${actualRange}로 기록되었습니다.`;
 }
 
 /** 알림 타입+payload로부터 사람이 읽을 수 있는 한국어 문구를 생성한다. */
@@ -45,6 +63,8 @@ export function formatNotificationMessage(
       return payload.subject
         ? `문의에 새 답장이 도착했습니다: ${String(payload.subject)}`
         : "문의에 새 답장이 도착했습니다.";
+    case "attendance_recorded":
+      return formatAttendanceMessage(payload);
     default:
       return "새 알림이 있습니다.";
   }

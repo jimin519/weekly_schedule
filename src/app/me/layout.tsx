@@ -4,6 +4,7 @@ import { SectionNav } from "@/components/layout/section-nav";
 
 const NAV_ITEMS = [
   { href: "/me/schedule", label: "내 스케줄" },
+  { href: "/me/hours", label: "내 근무 기록" },
   { href: "/me/availability", label: "불가 시간 등록" },
   { href: "/me/inquiries", label: "문의" },
 ];

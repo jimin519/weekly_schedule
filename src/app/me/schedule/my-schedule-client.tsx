@@ -19,6 +19,18 @@ import { useHighlightedIds } from "@/lib/realtime/use-highlighted-ids";
 import { useActiveMembers } from "@/lib/queries/members";
 import { useWeek, weekQueryKey } from "@/lib/queries/weeks";
 import { shiftsQueryKey, useShifts } from "@/lib/queries/shifts";
+import {
+  ATTENDANCE_RANGE_ROOT_KEY,
+  useWeekShiftRecords,
+  weekRecordsQueryKey,
+} from "@/lib/queries/shift-records";
+import {
+  attendanceBadgeLabel,
+  describeRecord,
+  formatMinutes,
+  formatSignedMinutes,
+  summarizeAttendance,
+} from "@/lib/calendar/attendance";
 import { isoToDayMinutes, normalizeEndMinutes } from "@/lib/calendar/convert";
 import type { CalendarBlock } from "@/components/calendar/types";
 
@@ -55,6 +67,12 @@ export function MyScheduleClient({
   const shiftsQuery = useShifts(week?.id);
   const shifts = useMemo(() => shiftsQuery.data ?? [], [shiftsQuery.data]);
 
+  const recordsQuery = useWeekShiftRecords(week?.id);
+  const recordsByShiftId = useMemo(
+    () => new Map((recordsQuery.data ?? []).map((r) => [r.shift_id, r])),
+    [recordsQuery.data],
+  );
+
   const membersQuery = useActiveMembers();
   const members = useMemo(
     () =>
@@ -81,19 +99,35 @@ export function MyScheduleClient({
       const { dayIndex, minutes: startMinutes } = isoToDayMinutes(s.start_at, weekStart);
       if (dayIndex === -1) return [];
       const endMinutes = normalizeEndMinutes(dayIndex, s.end_at, weekStart);
+      const badge = attendanceBadgeLabel(summarizeAttendance(s, recordsByShiftId.get(s.id)));
       return [
-        { id: s.id, memberId: s.member_id, dayIndex, startMinutes, endMinutes, note: s.note },
+        { id: s.id, memberId: s.member_id, dayIndex, startMinutes, endMinutes, note: s.note, badge },
       ];
     });
-  }, [shifts, weekStart]);
+  }, [shifts, weekStart, recordsByShiftId]);
 
-  const myTotalMinutes = useMemo(
-    () =>
-      blocks
-        .filter((b) => b.memberId === memberId)
-        .reduce((sum, b) => sum + (b.endMinutes - b.startMinutes), 0),
-    [blocks, memberId],
-  );
+  // 이번 주 내 근무 시간: 기록이 있으면 실제 시간, 없으면 계획 시간으로 합산한다.
+  const { myTotalMinutes, myAdjustmentMinutes } = useMemo(() => {
+    let total = 0;
+    let adjustment = 0;
+    for (const s of shifts) {
+      if (s.member_id !== memberId) continue;
+      const summary = summarizeAttendance(s, recordsByShiftId.get(s.id));
+      total += summary.effectiveMinutes;
+      adjustment += summary.diffMinutes;
+    }
+    return { myTotalMinutes: total, myAdjustmentMinutes: adjustment };
+  }, [shifts, memberId, recordsByShiftId]);
+
+  const recordLabelByBlockId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of shifts) {
+      if (s.member_id !== memberId) continue;
+      const label = describeRecord(s, recordsByShiftId.get(s.id));
+      if (label) map.set(s.id, label);
+    }
+    return map;
+  }, [shifts, memberId, recordsByShiftId]);
 
   const visibleMemberIds = useMemo(
     () =>
@@ -119,6 +153,16 @@ export function MyScheduleClient({
     { enabled: !!week, invalidateKey: shiftsQueryKey(week?.id) },
   );
 
+  const recordsRealtimeStatus = useTableRealtime(
+    "shift_records",
+    undefined,
+    () => {
+      queryClient.invalidateQueries({ queryKey: weekRecordsQueryKey(week?.id) });
+      queryClient.invalidateQueries({ queryKey: ATTENDANCE_RANGE_ROOT_KEY });
+    },
+    { invalidateKey: weekRecordsQueryKey(week?.id) },
+  );
+
   const weekRealtimeStatus = useTableRealtime(
     "schedule_weeks",
     `week_start_date=eq.${weekStart}`,
@@ -126,9 +170,11 @@ export function MyScheduleClient({
     { invalidateKey: weekQueryKey(weekStart) },
   );
 
-  const isRealtimeDisconnected = [shiftsRealtimeStatus, weekRealtimeStatus].includes(
-    "disconnected",
-  );
+  const isRealtimeDisconnected = [
+    shiftsRealtimeStatus,
+    weekRealtimeStatus,
+    recordsRealtimeStatus,
+  ].includes("disconnected");
 
   if (weekQuery.isError || membersQuery.isError) {
     return (
@@ -187,8 +233,8 @@ export function MyScheduleClient({
         viewSwitch={
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">
-              이번 주 총 근무 시간: {Math.floor(myTotalMinutes / 60)}시간{" "}
-              {myTotalMinutes % 60}분
+              이번 주 총 근무 시간: {formatMinutes(myTotalMinutes)}
+              {myAdjustmentMinutes !== 0 && ` (계획 대비 ${formatSignedMinutes(myAdjustmentMinutes)})`}
             </span>
             <Tabs value={view} onValueChange={(v) => setView(v as View)}>
               <TabsList>
@@ -241,6 +287,7 @@ export function MyScheduleClient({
         members={allMembers}
         onClose={() => setDetailDate(null)}
         currentMemberId={memberId}
+        recordLabelByBlockId={recordLabelByBlockId}
         onInquireAboutShift={(block) =>
           router.push(`/me/inquiries?shiftId=${block.id}&weekId=${week.id}`)
         }

@@ -10,6 +10,7 @@ export function CalendarSidebar({
   onToggleMember,
   onToggleAllMembers,
   hoursByMemberId,
+  adjustmentByMemberId,
   extra,
 }: {
   weekStart: string;
@@ -19,6 +20,7 @@ export function CalendarSidebar({
   onToggleMember: (id: string) => void;
   onToggleAllMembers: (visible: boolean) => void;
   hoursByMemberId?: Map<string, number>;
+  adjustmentByMemberId?: Map<string, number>;
   extra?: React.ReactNode;
 }) {
   return (
@@ -31,6 +33,7 @@ export function CalendarSidebar({
         onToggle={onToggleMember}
         onToggleAll={onToggleAllMembers}
         hoursByMemberId={hoursByMemberId}
+        adjustmentByMemberId={adjustmentByMemberId}
       />
     </aside>
   );

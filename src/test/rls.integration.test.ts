@@ -92,3 +92,94 @@ describe("RLS: draft 주차는 멤버에게 절대 노출되지 않는다", () =
     await member.from("unavailability").delete().eq("id", inserted!.id);
   });
 });
+
+describe("RLS: 실제 근무 기록(shift_records)은 본인 것만 읽을 수 있고 멤버는 쓸 수 없다", () => {
+  const admin = createClient<Database>(URL, SERVICE_ROLE_KEY);
+  let member: SupabaseClient<Database>;
+  let ownShiftId: string;
+  let otherShiftId: string;
+  const testStartedAt = new Date().toISOString();
+
+  async function pickPublishedShiftWithoutRecord(memberId: string): Promise<string> {
+    const { data: shifts, error } = await admin
+      .from("shifts")
+      .select("id, schedule_weeks!inner(status), shift_records(shift_id)")
+      .eq("member_id", memberId)
+      .eq("schedule_weeks.status", "published");
+    if (error) throw error;
+    const candidate = (shifts ?? []).find((s) => {
+      const records = s.shift_records as unknown;
+      return records === null || (Array.isArray(records) && records.length === 0);
+    });
+    if (!candidate) throw new Error(`기록이 없는 게시된 근무가 없습니다: ${memberId}`);
+    return candidate.id;
+  }
+
+  beforeAll(async () => {
+    ownShiftId = await pickPublishedShiftWithoutRecord(MEMBER01_ID);
+    otherShiftId = await pickPublishedShiftWithoutRecord(MEMBER02_ID);
+
+    const { error } = await admin.from("shift_records").insert([
+      { shift_id: ownShiftId, status: "absent", note: "RLS 통합 테스트" },
+      { shift_id: otherShiftId, status: "absent", note: "RLS 통합 테스트" },
+    ]);
+    if (error) throw error;
+
+    member = createClient<Database>(URL, ANON_KEY);
+    const { error: signInError } = await member.auth.signInWithPassword({
+      email: "member01@example.com",
+      password: "Password123!",
+    });
+    if (signInError) throw signInError;
+  });
+
+  afterAll(async () => {
+    await admin.from("shift_records").delete().in("shift_id", [ownShiftId, otherShiftId]);
+    await admin
+      .from("notifications")
+      .delete()
+      .eq("type", "attendance_recorded")
+      .gte("created_at", testStartedAt);
+  });
+
+  it("멤버는 본인 근무의 기록을 조회할 수 있다", async () => {
+    const { data } = await member.from("shift_records").select("shift_id").eq("shift_id", ownShiftId);
+    expect(data).toEqual([{ shift_id: ownShiftId }]);
+  });
+
+  it("멤버는 동료 근무의 기록을 API로도 조회할 수 없다", async () => {
+    const { data } = await member.from("shift_records").select("shift_id").eq("shift_id", otherShiftId);
+    expect(data).toEqual([]);
+
+    const { data: all } = await member.from("shift_records").select("shift_id");
+    expect((all ?? []).map((r) => r.shift_id)).not.toContain(otherShiftId);
+  });
+
+  it("멤버는 shift_records에 직접 쓸 수 없다", async () => {
+    const { error } = await member
+      .from("shift_records")
+      .update({ status: "worked", actual_start_at: "2026-01-01T00:00:00Z", actual_end_at: "2026-01-01T01:00:00Z" })
+      .eq("shift_id", ownShiftId);
+    expect(error).toBeNull();
+
+    const { data } = await admin.from("shift_records").select("status").eq("shift_id", ownShiftId).single();
+    expect(data?.status).toBe("absent");
+
+    const { error: insertError } = await member
+      .from("shift_records")
+      .insert({ shift_id: otherShiftId, status: "absent" });
+    expect(insertError).not.toBeNull();
+
+    await member.from("shift_records").delete().eq("shift_id", ownShiftId);
+    const { data: stillThere } = await admin.from("shift_records").select("shift_id").eq("shift_id", ownShiftId);
+    expect(stillThere).toHaveLength(1);
+  });
+
+  it("결근/실제 시각이 서로 모순되는 기록은 DB가 거부한다", async () => {
+    const { error } = await admin
+      .from("shift_records")
+      .update({ status: "worked" })
+      .eq("shift_id", ownShiftId);
+    expect(error).not.toBeNull();
+  });
+});

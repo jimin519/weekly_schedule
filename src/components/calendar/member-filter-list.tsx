@@ -5,10 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { CalendarMember } from "./types";
 
+import { formatMinutes, formatSignedMinutes } from "@/lib/calendar/attendance";
+
 function formatHours(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes === 0 ? `${hours}시간` : `${hours}시간 ${minutes}분`;
+  return totalMinutes === 0 ? "0시간" : formatMinutes(totalMinutes);
 }
 
 export function MemberFilterList({
@@ -17,12 +17,15 @@ export function MemberFilterList({
   onToggle,
   onToggleAll,
   hoursByMemberId,
+  adjustmentByMemberId,
 }: {
   members: CalendarMember[];
   visibleIds: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: (visible: boolean) => void;
   hoursByMemberId?: Map<string, number>;
+  /** 계획 대비 실제 근무 증감(분). 0이 아닌 멤버에게만 표시한다. */
+  adjustmentByMemberId?: Map<string, number>;
 }) {
   const allVisible = members.length > 0 && members.every((m) => visibleIds.has(m.id));
 
@@ -59,6 +62,18 @@ export function MemberFilterList({
               {hoursByMemberId && (
                 <span className="text-xs text-muted-foreground">
                   {formatHours(hoursByMemberId.get(member.id) ?? 0)}
+                  {(adjustmentByMemberId?.get(member.id) ?? 0) !== 0 && (
+                    <span
+                      className={
+                        (adjustmentByMemberId?.get(member.id) ?? 0) > 0
+                          ? "ml-1 text-emerald-600 dark:text-emerald-400"
+                          : "ml-1 text-red-600 dark:text-red-400"
+                      }
+                      title="계획 대비 실제 근무 증감"
+                    >
+                      {formatSignedMinutes(adjustmentByMemberId?.get(member.id) ?? 0)}
+                    </span>
+                  )}
                 </span>
               )}
             </li>

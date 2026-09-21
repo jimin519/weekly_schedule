@@ -12,4 +12,6 @@ export type CalendarBlock = {
   startMinutes: number;
   endMinutes: number;
   note?: string | null;
+  /** 계획과 다르게 기록된 근무에 붙이는 짧은 표시(예: "+1시간", "결근") */
+  badge?: string | null;
 };
