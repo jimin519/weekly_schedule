@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   checkSelfProtection,
+  validateEmail,
   validateMemberProfile,
   validateNewMember,
   validatePassword,
@@ -60,23 +61,70 @@ export async function createMember(
 
 export async function updateMember(
   memberId: string,
-  input: MemberProfileInput,
+  input: MemberProfileInput & { email: string },
 ): Promise<MemberActionResult> {
   const actor = await requireAdminActor();
   if (!actor.ok) return actor;
 
   const validationError =
+    validateEmail(input.email) ??
     validateMemberProfile(input) ??
     checkSelfProtection(actor.id, memberId, { role: input.role });
   if (validationError) return fail(validationError);
 
   const supabase = await createClient();
+  const { data: current, error: loadError } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", memberId)
+    .single();
+  if (loadError || !current) return fail("멤버를 찾을 수 없습니다.");
+
+  const newEmail = input.email.trim().toLowerCase();
+  const emailChanged = newEmail !== current.email.toLowerCase();
+
+  // profiles.email은 auth.users와 자동 동기화되지 않으므로 둘 다 직접 바꾼다.
+  const admin = createAdminClient();
+  if (emailChanged) {
+    // auth API는 중복 이메일을 일반 DB 오류로 돌려주므로 먼저 직접 확인한다.
+    const { data: taken } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("email", newEmail)
+      .neq("id", memberId)
+      .limit(1);
+    if (taken && taken.length > 0) return fail("이미 등록된 이메일입니다.");
+
+    const { error: authError } = await admin.auth.admin.updateUserById(memberId, {
+      email: newEmail,
+      email_confirm: true,
+    });
+    if (authError) {
+      if (authError.code === "email_exists") return fail("이미 등록된 이메일입니다.");
+      return fail("이메일을 변경하지 못했습니다.");
+    }
+  }
+
   const { error } = await supabase
     .from("profiles")
-    .update({ name: input.name.trim(), role: input.role, color: input.color })
+    .update({
+      name: input.name.trim(),
+      role: input.role,
+      color: input.color,
+      ...(emailChanged ? { email: newEmail } : {}),
+    })
     .eq("id", memberId);
 
-  if (error) return fail("멤버 정보를 저장하지 못했습니다.");
+  if (error) {
+    // 로그인 이메일만 바뀐 채로 남지 않도록 되돌린다.
+    if (emailChanged) {
+      await admin.auth.admin.updateUserById(memberId, {
+        email: current.email,
+        email_confirm: true,
+      });
+    }
+    return fail("멤버 정보를 저장하지 못했습니다.");
+  }
 
   revalidatePath("/admin/members");
   return { ok: true };

@@ -143,6 +143,7 @@ export function MembersClient({
           editing?.kind === "edit"
             ? afterChange(
                 updateMember(editing.member.id, {
+                  email: values.email,
                   name: values.name,
                   role: values.role,
                   color: values.color,

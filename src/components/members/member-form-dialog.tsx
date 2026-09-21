@@ -59,7 +59,9 @@ export function MemberFormDialog({
   isSelf?: boolean;
   onSubmit: (values: MemberFormValues) => Promise<MemberActionResult>;
 }) {
-  const isCreate = member === null;
+  // 닫히는 애니메이션 동안 화면이 다른 모드로 바뀌지 않도록 열릴 때의 값을 고정한다.
+  const [shown, setShown] = useState({ isCreate: member === null, isSelf });
+  const isCreate = shown.isCreate;
   const [values, setValues] = useState<MemberFormValues>(() => initialValues(member));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -69,6 +71,7 @@ export function MemberFormDialog({
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
+      setShown({ isCreate: member === null, isSelf });
       setValues(initialValues(member));
       setError(null);
       setPending(false);
@@ -98,7 +101,7 @@ export function MemberFormDialog({
             <DialogDescription>
               {isCreate
                 ? "새 계정을 만들고 초기 비밀번호를 설정합니다."
-                : "이름, 역할, 색상을 변경합니다."}
+                : "이메일, 이름, 역할, 색상을 변경합니다."}
             </DialogDescription>
           </DialogHeader>
 
@@ -109,10 +112,14 @@ export function MemberFormDialog({
               type="email"
               value={values.email}
               onChange={(e) => update("email", e.target.value)}
-              disabled={!isCreate}
               placeholder="name@example.com"
               autoComplete="off"
             />
+            {!isCreate && (
+              <p className="text-xs text-muted-foreground">
+                이메일을 바꾸면 이 멤버는 새 이메일로 로그인해야 합니다.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -131,7 +138,7 @@ export function MemberFormDialog({
               items={ROLE_LABELS}
               value={values.role}
               onValueChange={(v) => v && update("role", v as UserRole)}
-              disabled={isSelf}
+              disabled={shown.isSelf}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -141,7 +148,7 @@ export function MemberFormDialog({
                 <SelectItem value="admin">관리자</SelectItem>
               </SelectContent>
             </Select>
-            {isSelf && (
+            {shown.isSelf && (
               <p className="text-xs text-muted-foreground">
                 자기 자신의 역할은 변경할 수 없습니다.
               </p>

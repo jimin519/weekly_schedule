@@ -637,28 +637,48 @@ export function AdminScheduleClient({ adminId }: { adminId: string }) {
                 </Button>
                 {showExcluded && (
                   <ul className="space-y-1">
-                    {recommendation.excluded.map(({ member, reason, hoursThisWeek }) => (
-                      <li
-                        key={member.id}
-                        className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground"
-                      >
-                        <span
-                          className="size-2.5 shrink-0 rounded-full opacity-50"
-                          style={{ backgroundColor: member.color }}
-                        />
-                        <span className="flex-1">
-                          {member.name} · 이번 주 {hoursThisWeek}시간
-                        </span>
-                        <span className="text-xs">{formatExclusionReason(reason)}</span>
-                      </li>
-                    ))}
+                    {recommendation.excluded.map(({ member, reason, hoursThisWeek }) => {
+                      const rowContent = (
+                        <>
+                          <span
+                            className="size-2.5 shrink-0 rounded-full opacity-50"
+                            style={{ backgroundColor: member.color }}
+                          />
+                          <span className="flex-1">
+                            {member.name} · 이번 주 {hoursThisWeek}시간
+                          </span>
+                          <span className="text-xs">{formatExclusionReason(reason)}</span>
+                        </>
+                      );
+                      const rowClass =
+                        "flex w-full items-center gap-2 rounded-md border border-dashed px-3 py-2 text-left text-sm text-muted-foreground";
+
+                      // 불가 시간은 관리자가 확인 후 예외로 배정할 수 있다.
+                      // 이미 근무 중인 경우는 DB가 중복 배정을 막으므로 선택할 수 없다.
+                      return (
+                        <li key={member.id}>
+                          {reason === "unavailable" ? (
+                            <button
+                              type="button"
+                              onClick={() => commitCreate(member.id)}
+                              className={`${rowClass} hover:bg-accent hover:text-foreground`}
+                            >
+                              {rowContent}
+                            </button>
+                          ) : (
+                            <div className={rowClass}>{rowContent}</div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
             )}
 
             <p className="text-xs text-muted-foreground">
-              추천 인원을 클릭하면 즉시 근무가 배정됩니다.
+              추천 인원을 클릭하면 즉시 근무가 배정됩니다. 불가 시간을 등록한 인원은 확인 후
+              예외로 배정할 수 있습니다.
             </p>
           </div>
         )}
