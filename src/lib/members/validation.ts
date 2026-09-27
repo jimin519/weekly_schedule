@@ -26,6 +26,11 @@ export function validateEmail(email: string): string | null {
 }
 
 export function validatePassword(password: string): string | null {
+  // 붙여넣기 등으로 앞뒤에 섞인 공백은 그대로 저장되어, 멤버가 공백 없이 입력하면
+  // 로그인이 조용히 실패한다. 만들 때 미리 막는다.
+  if (password !== password.trim()) {
+    return "비밀번호 앞뒤에 공백이 있습니다. 공백을 지워주세요.";
+  }
   if (password.length < MIN_PASSWORD_LENGTH) {
     return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`;
   }

@@ -33,6 +33,14 @@ describe("validatePassword", () => {
   it("8자 이상은 통과한다", () => {
     expect(validatePassword("12345678")).toBeNull();
   });
+  it("앞뒤에 공백이 있으면 거부한다", () => {
+    expect(validatePassword("12345678 ")).not.toBeNull();
+    expect(validatePassword(" 12345678")).not.toBeNull();
+    expect(validatePassword("12345678\n")).not.toBeNull();
+  });
+  it("중간 공백은 허용한다", () => {
+    expect(validatePassword("1234 5678")).toBeNull();
+  });
 });
 
 describe("validateMemberProfile", () => {
