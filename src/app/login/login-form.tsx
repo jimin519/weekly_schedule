@@ -5,6 +5,7 @@ import { login, type LoginState } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FindAccountDialog } from "@/components/auth/find-account-dialog";
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(
@@ -43,6 +44,9 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "로그인 중..." : "로그인"}
       </Button>
+      <div className="text-center">
+        <FindAccountDialog />
+      </div>
     </form>
   );
 }
