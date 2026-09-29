@@ -372,6 +372,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_profile: {
+        Args: never
+        Returns: {
+          color: string
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          name: string
+          role: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
